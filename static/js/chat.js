@@ -12,7 +12,8 @@ async function _loadChatHistory() {
   try {
     const data = await apiFetch('/api/chat/history');
     if (data && Array.isArray(data.messages)) {
-      _chatHistory = data.messages;
+      // Don't restore error bubbles — they're transient (e.g. "Connection lost")
+      _chatHistory = data.messages.filter(m => m.role !== 'error');
     }
   } catch { /* server unavailable, start fresh */ }
   _chatHistoryLoaded = true;
@@ -20,7 +21,9 @@ async function _loadChatHistory() {
 
 async function _saveChatHistory() {
   try {
-    await apiPost('/api/chat/history', { messages: _chatHistory.slice(-200) });
+    // Don't persist error messages so refresh doesn't show stale connection errors
+    const toSave = _chatHistory.filter(m => m.role !== 'error').slice(-200);
+    await apiPost('/api/chat/history', { messages: toSave });
   } catch { /* silent */ }
 }
 
@@ -54,11 +57,11 @@ registerView('chat', async function renderChat() {
 
       ${_chatHistory.length > 0 ? `
         <div class="chat-toolbar" id="chatToolbar">
-          <button class="btn btn-ghost btn-sm" id="chatClearBtn" title="Clear conversation" style="font-size: 0.75rem; padding: 5px 10px;">
+          <button class="btn btn-ghost btn-sm" id="chatClearBtn" title="Clear and start a new conversation. Next message will have no prior context (good if the agent seems to be answering a different topic)." style="font-size: 0.75rem; padding: 5px 10px;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="margin-right: 4px; vertical-align: -2px;">
               <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
             </svg>
-            Clear
+            New conversation
           </button>
         </div>
       ` : ''}
@@ -126,11 +129,11 @@ registerView('chat', async function renderChat() {
       }
     }
 
-    // Clear conversation button
+    // New conversation — clears history so next message has no prior context
     const clearBtn = document.getElementById('chatClearBtn');
     if (clearBtn) {
       clearBtn.addEventListener('click', async () => {
-        if (!confirm('Clear all chat history?')) return;
+        if (!confirm('Start a new conversation? This clears the thread so your next message is sent with no prior context (the agent will focus only on what you type).')) return;
         await _clearChatHistory();
         navigateTo('chat');
       });
@@ -236,23 +239,34 @@ async function sendChatMessage() {
   input.disabled = true;
   document.getElementById('chatSendBtn')?.setAttribute('disabled', '');
 
+  const CHAT_REQUEST_TIMEOUT_MS = 150000; // 2.5 min — agent may be slow
+  let timeoutId = null;
+
   try {
-    // Build history for context (only role + content, no errors)
+    // Send only last 6 turns (3 exchanges) so the agent focuses on your latest message
+    // and doesn't mix in old topics or other chat windows
     const contextHistory = _chatHistory
       .filter(m => m.role === 'user' || m.role === 'assistant')
       .slice(0, -1)  // exclude the empty assistant placeholder
-      .slice(-20);
+      .slice(-6);
 
     const chatPayload = {
       message,
       history: contextHistory,
     };
 
+    const controller = new AbortController();
+    timeoutId = setTimeout(() => controller.abort(), CHAT_REQUEST_TIMEOUT_MS);
+
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(chatPayload),
+      signal: controller.signal,
     });
+
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = null;
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -341,7 +355,15 @@ async function sendChatMessage() {
 
   } catch (err) {
     console.error('Chat error:', err);
-    _chatHistory[agentIdx] = { role: 'error', content: `Connection error: ${err.message}` };
+    let friendlyMessage = err.message || 'Connection error';
+    if (err.name === 'AbortError') {
+      friendlyMessage = 'Request timed out. Your agent may still be busy—try sending again.';
+    } else if (/Load failed|Failed to fetch|NetworkError|Network request failed/i.test(friendlyMessage)) {
+      friendlyMessage = 'Connection lost. Your agent is likely still running—try sending your message again.';
+    } else if (!friendlyMessage.startsWith('HTTP ')) {
+      friendlyMessage = `Connection error: ${friendlyMessage}`;
+    }
+    _chatHistory[agentIdx] = { role: 'error', content: friendlyMessage };
     const bubbleEl = document.getElementById(`bubble-${agentIdx}`);
     if (bubbleEl) {
       bubbleEl.closest('.chat-bubble-wrap').outerHTML = renderChatBubble(
@@ -349,6 +371,7 @@ async function sendChatMessage() {
       );
     }
   } finally {
+    if (timeoutId) clearTimeout(timeoutId);
     _chatStreaming = false;
     input.disabled = false;
     document.getElementById('chatSendBtn')?.removeAttribute('disabled');

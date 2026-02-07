@@ -323,9 +323,10 @@ def chat_proxy():
         return jsonify({"error": "Empty message"}), 400
 
     # Build OpenAI-format messages list from history + new message
+    # Keep only last 6 turns so the agent responds to the current message, not old/other-window context
     history = body.get("history", [])
     messages = []
-    for h in history[-20:]:  # keep last 20 turns for context
+    for h in history[-6:]:
         messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
     messages.append({"role": "user", "content": user_msg})
 
