@@ -115,14 +115,15 @@ registerView('chat', async function renderChat() {
       input.focus();
     }
 
-    // Scroll to bottom — multiple attempts to handle mobile layout settling
+    // Scroll to bottom — multiple attempts for mobile where layout completes late
     if (messages) {
-      const scrollBottom = () => { messages.scrollTop = messages.scrollHeight; };
-      scrollBottom();
-      requestAnimationFrame(scrollBottom);
-      setTimeout(scrollBottom, 100);
-      setTimeout(scrollBottom, 300);
-      setTimeout(scrollBottom, 600);
+      const scrollDown = () => { messages.scrollTop = messages.scrollHeight; };
+      scrollDown();
+      requestAnimationFrame(scrollDown);
+      // Staggered delays to catch late layout shifts on mobile
+      for (const ms of [100, 300, 600, 1000]) {
+        setTimeout(scrollDown, ms);
+      }
     }
 
     // Clear conversation button

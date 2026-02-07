@@ -23,6 +23,56 @@ const App = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Navigation config (default order, icons, labels)
+// ---------------------------------------------------------------------------
+
+const NAV_ITEMS = {
+  chat:      { label: 'Chat',      icon: '<path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>' },
+  dashboard: { label: 'Dashboard', icon: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>' },
+  agent:     { label: 'Agent',     icon: '<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>' },
+  calendar:  { label: 'Calendar',  icon: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>' },
+  learning:  { label: 'Learning',  icon: '<path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/>' },
+  goals:     { label: 'Goals',     icon: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>' },
+  content:   { label: 'Content',   icon: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>' },
+  sessions:  { label: 'Sessions',  icon: '<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>' },
+};
+
+const DEFAULT_NAV_ORDER = ['chat', 'dashboard', 'agent', 'calendar', 'learning', 'goals', 'content', 'sessions'];
+
+function getNavOrder() {
+  try {
+    const saved = localStorage.getItem('pinchy_nav_order');
+    if (saved) {
+      const order = JSON.parse(saved);
+      // Validate: must contain all known keys
+      const allKeys = Object.keys(NAV_ITEMS);
+      if (Array.isArray(order) && allKeys.every(k => order.includes(k))) {
+        return order;
+      }
+    }
+  } catch { /* corrupt data, use default */ }
+  return [...DEFAULT_NAV_ORDER];
+}
+
+function saveNavOrder(order) {
+  localStorage.setItem('pinchy_nav_order', JSON.stringify(order));
+}
+
+function renderSidebarNav() {
+  const nav = document.getElementById('sidebarNav');
+  if (!nav) return;
+  const order = getNavOrder();
+  nav.innerHTML = order.map(key => {
+    const item = NAV_ITEMS[key];
+    if (!item) return '';
+    return `<a href="#${key}" class="nav-item" data-view="${key}">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${item.icon}</svg>
+      <span class="nav-label">${item.label}</span>
+    </a>`;
+  }).join('');
+}
+
 // Currency symbol map
 const CURRENCY_SYMBOLS = {
   USD: '$', GBP: '\u00a3', EUR: '\u20ac', CAD: 'C$', AUD: 'A$',
@@ -304,6 +354,7 @@ async function navigateTo(viewName) {
     content: 'Content',
     learning: 'Learning Log',
     calendar: 'Calendar',
+    agent: 'Agent',
     settings: 'Settings',
   };
   document.getElementById('pageTitle').textContent = titles[viewName] || viewName;
@@ -669,6 +720,7 @@ async function _finishOnboarding(skipped) {
 // ---------------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
+  renderSidebarNav();
   setupMobileNav();
 
   // Refresh button

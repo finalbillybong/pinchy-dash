@@ -221,6 +221,20 @@ registerView('settings', async function renderSettings() {
         <div id="settingsMessage" style="margin-top: 16px; display: none;"></div>
       </div>
 
+      <!-- Navigation Order -->
+      <div class="card fade-in" style="margin-bottom: 24px;">
+        <div class="card-header">
+          <span class="card-title">Navigation Order</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5;">
+          Drag items to reorder the sidebar menu. Changes are saved instantly.
+        </p>
+        <div id="navOrderList" class="nav-order-list"></div>
+        <div style="margin-top: 12px;">
+          <button class="btn btn-ghost" id="btnResetNavOrder" style="font-size: 0.8rem;">Reset to Default</button>
+        </div>
+      </div>
+
       <!-- Info card -->
       <div class="card fade-in">
         <div class="card-title" style="margin-bottom: 12px;">Setup Help</div>
@@ -262,6 +276,9 @@ registerView('settings', async function renderSettings() {
       });
     }
 
+    // Navigation order (drag to reorder)
+    _initNavOrderEditor();
+
     // Icon file upload handler
     const iconInput = document.getElementById('settingsIconFile');
     if (iconInput) {
@@ -300,6 +317,146 @@ registerView('settings', async function renderSettings() {
 
   return html;
 });
+
+// ---------------------------------------------------------------------------
+// Navigation order editor (drag to reorder, touch-friendly)
+// ---------------------------------------------------------------------------
+
+function _initNavOrderEditor() {
+  const listEl = document.getElementById('navOrderList');
+  const resetBtn = document.getElementById('btnResetNavOrder');
+  if (!listEl) return;
+
+  let order = getNavOrder();
+
+  function render() {
+    listEl.innerHTML = order.map((key, idx) => {
+      const item = NAV_ITEMS[key];
+      if (!item) return '';
+      return `<div class="nav-order-item" data-key="${key}" draggable="true">
+        <span class="nav-order-handle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="16" y2="18"/>
+          </svg>
+        </span>
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;flex-shrink:0;">${item.icon}</svg>
+        <span class="nav-order-label">${item.label}</span>
+        <span class="nav-order-pos">${idx + 1}</span>
+      </div>`;
+    }).join('');
+
+    // Drag & drop (desktop)
+    let dragSrc = null;
+    listEl.querySelectorAll('.nav-order-item').forEach(el => {
+      el.addEventListener('dragstart', (e) => {
+        dragSrc = el;
+        el.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      el.addEventListener('dragend', () => {
+        el.classList.remove('dragging');
+        listEl.querySelectorAll('.nav-order-item').forEach(x => x.classList.remove('drag-over'));
+      });
+      el.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        listEl.querySelectorAll('.nav-order-item').forEach(x => x.classList.remove('drag-over'));
+        el.classList.add('drag-over');
+      });
+      el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (!dragSrc || dragSrc === el) return;
+        const fromKey = dragSrc.dataset.key;
+        const toKey = el.dataset.key;
+        const fromIdx = order.indexOf(fromKey);
+        const toIdx = order.indexOf(toKey);
+        order.splice(fromIdx, 1);
+        order.splice(toIdx, 0, fromKey);
+        _applyOrder();
+      });
+    });
+
+    // Touch drag support (mobile)
+    _initTouchDrag(listEl, order, _applyOrder);
+  }
+
+  function _applyOrder() {
+    saveNavOrder(order);
+    renderSidebarNav();
+    render(); // re-render to update position numbers
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      order = [...DEFAULT_NAV_ORDER];
+      _applyOrder();
+    });
+  }
+
+  render();
+}
+
+function _initTouchDrag(listEl, order, applyCallback) {
+  let touchItem = null;
+  let touchClone = null;
+  let startY = 0;
+  let startIdx = 0;
+
+  listEl.addEventListener('touchstart', (e) => {
+    const item = e.target.closest('.nav-order-item');
+    if (!item) return;
+    touchItem = item;
+    startY = e.touches[0].clientY;
+    startIdx = [...listEl.children].indexOf(item);
+    touchClone = item.cloneNode(true);
+    touchClone.classList.add('nav-order-ghost');
+    touchClone.style.position = 'fixed';
+    touchClone.style.left = item.getBoundingClientRect().left + 'px';
+    touchClone.style.top = item.getBoundingClientRect().top + 'px';
+    touchClone.style.width = item.offsetWidth + 'px';
+    touchClone.style.zIndex = '9999';
+    touchClone.style.pointerEvents = 'none';
+    document.body.appendChild(touchClone);
+    item.style.opacity = '0.3';
+  }, { passive: true });
+
+  listEl.addEventListener('touchmove', (e) => {
+    if (!touchItem || !touchClone) return;
+    e.preventDefault();
+    const y = e.touches[0].clientY;
+    touchClone.style.top = (touchItem.getBoundingClientRect().top + (y - startY)) + 'px';
+
+    // Highlight drop target
+    listEl.querySelectorAll('.nav-order-item').forEach(el => el.classList.remove('drag-over'));
+    const target = document.elementFromPoint(e.touches[0].clientX, y);
+    const over = target?.closest('.nav-order-item');
+    if (over && over !== touchItem) over.classList.add('drag-over');
+  }, { passive: false });
+
+  listEl.addEventListener('touchend', (e) => {
+    if (!touchItem) return;
+    touchItem.style.opacity = '';
+    if (touchClone) touchClone.remove();
+    touchClone = null;
+
+    // Find where we dropped
+    const items = [...listEl.querySelectorAll('.nav-order-item')];
+    const overEl = items.find(el => el.classList.contains('drag-over'));
+    items.forEach(el => el.classList.remove('drag-over'));
+
+    if (overEl && overEl !== touchItem) {
+      const fromKey = touchItem.dataset.key;
+      const toKey = overEl.dataset.key;
+      const fromIdx = order.indexOf(fromKey);
+      const toIdx = order.indexOf(toKey);
+      order.splice(fromIdx, 1);
+      order.splice(toIdx, 0, fromKey);
+      applyCallback();
+    }
+
+    touchItem = null;
+  });
+}
 
 function showSettingsMessage(text, type) {
   const el = document.getElementById('settingsMessage');
