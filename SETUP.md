@@ -52,7 +52,7 @@ You can pre-configure these in a `.env` file or pass them to `docker compose`:
 
 | Variable | Default | Description |
 |---|---|---|
-| `OPENCLAW_GATEWAY_URL` | *(empty)* | OpenClaw Gateway URL (e.g. `http://192.168.0.53:18789`). If not set, configure via onboarding wizard. |
+| `OPENCLAW_GATEWAY_URL` | *(empty)* | OpenClaw Gateway URL (e.g. `http://192.168.1.100:18789`). If not set, configure via onboarding wizard. |
 | `OPENCLAW_GATEWAY_TOKEN` | *(empty)* | Gateway auth token. If not set, configure via UI. |
 | `OPENCLAW_DATA_DIR` | `~/.openclaw` | Path to OpenClaw data directory on the host (mounted read-only) |
 | `CALENDAR_DATA_DIR` | *(empty)* | Path to vdirsyncer calendar data on host (optional, auto-detected from OpenClaw mount) |
@@ -64,7 +64,7 @@ You can pre-configure these in a `.env` file or pass them to `docker compose`:
 ### Example with environment variables
 
 ```bash
-OPENCLAW_GATEWAY_URL=http://192.168.0.53:18789 \
+OPENCLAW_GATEWAY_URL=http://192.168.1.100:18789 \
 OPENCLAW_GATEWAY_TOKEN=your-token \
 docker compose up -d
 ```

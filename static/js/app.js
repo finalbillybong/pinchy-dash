@@ -511,7 +511,7 @@ function _renderStep1(body, titleEl, subtitleEl) {
       <label class="form-label">Gateway URL</label>
       <input class="form-input" id="obUrl" type="url" placeholder="http://192.168.x.x:18789" autocomplete="off" />
       <p style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
-        Your OpenClaw Gateway address, e.g. <code style="background:var(--bg-card);padding:1px 4px;border-radius:3px;">http://192.168.0.53:18789</code>
+        Your OpenClaw Gateway address, e.g. <code style="background:var(--bg-card);padding:1px 4px;border-radius:3px;">http://192.168.1.100:18789</code>
       </p>
     </div>
     <div class="form-group">

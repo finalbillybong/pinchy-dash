@@ -45,7 +45,7 @@ Optional: create a `.env` file or set environment variables:
 
 | Variable | Description |
 |----------|-------------|
-| `OPENCLAW_GATEWAY_URL` | Gateway URL (e.g. `http://192.168.0.53:18789`) |
+| `OPENCLAW_GATEWAY_URL` | Gateway URL (e.g. `http://192.168.1.100:18789`) |
 | `OPENCLAW_GATEWAY_TOKEN` | Gateway auth token |
 | `OPENCLAW_DATA_DIR` | Host path to OpenClaw data (default: `~/.openclaw`) |
 | `CALENDAR_DATA_DIR` | Host path to vdirsyncer calendar data (optional) |
