@@ -18,7 +18,7 @@
   <!-- Port mapping -->
   <Config
     Name="Web UI Port"
-    Target="39877"
+    Target="39876"
     Default="39877"
     Mode="tcp"
     Description="Port for the Pinchy Dashboard web interface."
