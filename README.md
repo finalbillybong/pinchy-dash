@@ -4,6 +4,8 @@ A modern dashboard for monitoring your [OpenClaw](https://github.com/openclaw-ai
 
 <img src="static/pinchy-icon.png" width="48" height="48" alt="Pinchy" />
 
+<img src="screenshot.png" width="640" alt="Pinchy Dashboard screenshot" />
+
 ---
 
 ## Running with Docker
