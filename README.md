@@ -2,7 +2,7 @@
 
 A modern dashboard for monitoring your [OpenClaw](https://github.com/openclaw-ai/openclaw) AI agent: token tracking, cost charts, session history, **chat with your agent**, goal management, content planning, learning log, calendar sync, and real-time agent health.
 
-![Dashboard](static/pinchy-icon.png)
+<img src="static/pinchy-icon.png" width="48" height="48" alt="Pinchy" />
 
 ---
 
