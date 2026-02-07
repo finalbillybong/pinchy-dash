@@ -24,6 +24,14 @@ registerView('calendar', async function renderCalendar() {
     }
   }
 
+  // Sort by date then time so "Next Event" and list order are correct
+  const eventSortKey = (e) => {
+    const d = e.date || '';
+    const t = (e.time === 'All day' || !e.time) ? '00:00' : (e.time || '00:00');
+    return d + ' ' + t;
+  };
+  events = [...events].sort((a, b) => eventSortKey(a).localeCompare(eventSortKey(b)));
+
   // Group events by date
   const groups = {};
   events.forEach(e => {
@@ -32,7 +40,7 @@ registerView('calendar', async function renderCalendar() {
     groups[key].push(e);
   });
 
-  const groupKeys = Object.keys(groups);
+  const groupKeys = Object.keys(groups).sort();
 
   const html = `
     <div class="toolbar">

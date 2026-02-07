@@ -33,8 +33,9 @@ registerView('dashboard', async function renderDashboard() {
   // Learning preview (last 3)
   const recentLearning = learning.slice(-3).reverse();
 
-  // Calendar preview (next 3)
-  const nextEvents = calendar.slice(0, 3);
+  // Calendar preview (next 3) — sort by date then time so first is soonest
+  const calSortKey = (e) => (e.date || '') + ' ' + ((e.time === 'All day' || !e.time) ? '00:00' : (e.time || '00:00'));
+  const nextEvents = [...calendar].sort((a, b) => calSortKey(a).localeCompare(calSortKey(b))).slice(0, 3);
 
   const html = `
     <!-- Stat Cards -->
