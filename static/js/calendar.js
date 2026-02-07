@@ -5,6 +5,8 @@
 registerView('calendar', async function renderCalendar() {
   const d = App.data || {};
   let events = (d.calendar && d.calendar.length > 0) ? d.calendar : [];
+  let calSource = 'collector';
+  let calError = '';
 
   // If collector hasn't populated events yet, fetch live from the API
   // (this uses Gateway chat fallback when no ICS mount is available)
@@ -13,8 +15,13 @@ registerView('calendar', async function renderCalendar() {
       const live = await apiFetch('/api/calendars/events?days=7');
       if (live && live.events && live.events.length > 0) {
         events = live.events;
+        calSource = live.source || 'live';
+      } else if (live && live.source === 'none') {
+        calError = 'No calendar data found. Check Settings to discover calendars.';
       }
-    } catch { /* silent — show empty state */ }
+    } catch (e) {
+      calError = 'Failed to fetch calendar events.';
+    }
   }
 
   // Group events by date
@@ -54,6 +61,7 @@ registerView('calendar', async function renderCalendar() {
     <!-- Calendar list grouped by day -->
     <div class="card fade-in">
       <div id="calendarGroups">
+        ${calError ? `<div class="empty-state"><p>${calError}</p></div>` : ''}
         ${groupKeys.length ? groupKeys.map(date => `
           <div class="day-group calendar-group" data-date="${date}">
             <div class="day-label">${date}</div>

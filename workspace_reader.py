@@ -31,12 +31,28 @@ def read_identity(base_path=None):
     name = ""
     description = ""
 
-    # Try to extract name from first heading
+    # 1. Look for structured "- **Name:** value" field (preferred)
+    name_match = re.search(r'-\s*\*\*Name:\*\*\s*(.+)', raw)
+    if name_match:
+        name = name_match.group(1).strip()
+
+    # 2. Fallback: first heading (strip common suffixes like "- Who Am I?")
+    if not name:
+        for line in raw.split("\n"):
+            line = line.strip()
+            if line.startswith("# "):
+                heading = line[2:].strip()
+                # Remove "IDENTITY.md" prefix and decorative suffixes
+                heading = re.sub(r'^IDENTITY\.md\s*[-–—]\s*', '', heading).strip()
+                heading = re.sub(r'\s*[-–—]\s*Who Am I\??$', '', heading, flags=re.IGNORECASE).strip()
+                if heading:
+                    name = heading
+                break
+
+    # Extract first non-heading, non-empty line as description
     for line in raw.split("\n"):
         line = line.strip()
-        if line.startswith("# ") and not name:
-            name = line[2:].strip()
-        elif line and not line.startswith("#") and not description:
+        if line and not line.startswith("#") and not line.startswith("- **"):
             description = line
             break
 

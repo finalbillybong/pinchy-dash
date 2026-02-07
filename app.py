@@ -115,6 +115,20 @@ def get_data():
     return jsonify(_read_json("data.json", {}))
 
 
+@app.route("/api/collect", methods=["POST"])
+def trigger_collect():
+    """Trigger an immediate collector run (non-blocking)."""
+    import subprocess, sys
+    try:
+        subprocess.Popen(
+            [sys.executable, str(Path(__file__).parent / "collector.py")],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        return jsonify({"triggered": True})
+    except Exception as e:
+        return jsonify({"triggered": False, "error": str(e)}), 500
+
+
 @app.route("/api/history")
 def get_history():
     return jsonify(_read_json("history.json", {"daily": {}}))
@@ -495,6 +509,7 @@ def get_calendar_events():
 def _calendar_via_gateway(cfg, days=7):
     """Ask the OpenClaw agent to list calendar events via chat completions."""
     if not cfg.get("gateway_url") or not cfg.get("gateway_token"):
+        print("  [calendar-gw] no gateway_url or gateway_token configured")
         return []
 
     try:
@@ -503,18 +518,17 @@ def _calendar_via_gateway(cfg, days=7):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {cfg['gateway_token']}",
         }
-        stored = _read_json("config.json", {})
-        model = stored.get("default_model") or "openclaw:main"
 
         prompt = (
-            f"Run `khal list today {days}d --format '{{start-date}} {{start-time}} {{end-time}} {{title}}'` "
-            "and return ONLY the raw output, nothing else. No explanation."
+            f"Run this exact command and return ONLY its raw output with no explanation, "
+            f"no markdown formatting, no code fences:\n"
+            f"khal list today {days}d --format '{{start-date}} {{start-time}} {{end-time}} {{title}}'"
         )
 
         resp = http_requests.post(
             gateway_url,
             json={
-                "model": model,
+                "model": "openclaw:main",
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 2000,
             },
@@ -523,48 +537,102 @@ def _calendar_via_gateway(cfg, days=7):
         )
 
         if resp.status_code != 200:
+            print(f"  [calendar-gw] Gateway returned HTTP {resp.status_code}")
             return []
 
         data = resp.json()
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
         if not content:
+            print("  [calendar-gw] Gateway returned empty content")
             return []
 
-        # Parse the khal output lines
-        events = []
-        import re
-        for line in content.strip().split("\n"):
-            line = line.strip()
-            if not line or line.startswith("```") or line.startswith("#"):
-                continue
-            # Expected: YYYY-MM-DD HH:MM HH:MM Title  OR  YYYY-MM-DD Title (all day)
-            m = re.match(r"(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+(\d{2}:\d{2})\s+(.+)", line)
-            if m:
-                events.append({
-                    "date": m.group(1),
-                    "time": m.group(2),
-                    "end": m.group(3),
-                    "title": m.group(4).strip(),
-                    "location": "",
-                    "calendar": "khal",
-                    "all_day": False,
-                })
-            else:
-                m2 = re.match(r"(\d{4}-\d{2}-\d{2})\s+(.+)", line)
-                if m2:
-                    events.append({
-                        "date": m2.group(1),
-                        "time": "All day",
-                        "end": "",
-                        "title": m2.group(2).strip(),
-                        "location": "",
-                        "calendar": "khal",
-                        "all_day": True,
-                    })
+        print(f"  [calendar-gw] Raw response ({len(content)} chars): {content[:200]}")
 
+        # Parse the khal output lines
+        events = _parse_khal_output(content)
+        print(f"  [calendar-gw] Parsed {len(events)} events")
         return events[:50]
-    except Exception:
+    except Exception as e:
+        print(f"  [calendar-gw] Error: {e}")
         return []
+
+
+def _parse_khal_output(content):
+    """Parse khal list output into event dicts. Handles multiple date formats."""
+    import re
+    events = []
+    current_date = None
+
+    for line in content.strip().split("\n"):
+        line = line.strip()
+        if not line or line.startswith("```") or line.startswith("#"):
+            continue
+
+        # khal sometimes outputs date headers like "Today, 2026-02-07" or "Saturday, 08.02.2026"
+        date_header = re.match(r'^(?:Today|Tomorrow|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+(.+)', line, re.IGNORECASE)
+        if date_header:
+            date_str = date_header.group(1).strip()
+            # Try to parse the date from the header
+            parsed = _try_parse_date(date_str)
+            if parsed:
+                current_date = parsed
+            continue
+
+        # Standard format: YYYY-MM-DD HH:MM HH:MM Title
+        m = re.match(r"(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+(\d{2}:\d{2})\s+(.+)", line)
+        if m:
+            events.append({
+                "date": m.group(1), "time": m.group(2), "end": m.group(3),
+                "title": m.group(4).strip(), "location": "", "calendar": "khal", "all_day": False,
+            })
+            continue
+
+        # Format: YYYY-MM-DD HH:MM Title (no end time)
+        m2 = re.match(r"(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+(.+)", line)
+        if m2:
+            events.append({
+                "date": m2.group(1), "time": m2.group(2), "end": "",
+                "title": m2.group(3).strip(), "location": "", "calendar": "khal", "all_day": False,
+            })
+            continue
+
+        # Format: YYYY-MM-DD Title (all day)
+        m3 = re.match(r"(\d{4}-\d{2}-\d{2})\s+(.+)", line)
+        if m3:
+            events.append({
+                "date": m3.group(1), "time": "All day", "end": "",
+                "title": m3.group(2).strip(), "location": "", "calendar": "khal", "all_day": True,
+            })
+            continue
+
+        # Time-only line under a date header: "HH:MM-HH:MM Title" or "HH:MM HH:MM Title"
+        if current_date:
+            m4 = re.match(r"(\d{2}:\d{2})[-\s]+(\d{2}:\d{2})\s+(.+)", line)
+            if m4:
+                events.append({
+                    "date": current_date, "time": m4.group(1), "end": m4.group(2),
+                    "title": m4.group(3).strip(), "location": "", "calendar": "khal", "all_day": False,
+                })
+                continue
+            # All day event under date header
+            if not re.match(r'\d', line):
+                events.append({
+                    "date": current_date, "time": "All day", "end": "",
+                    "title": line, "location": "", "calendar": "khal", "all_day": True,
+                })
+
+    return events
+
+
+def _try_parse_date(s):
+    """Try to parse a date string into YYYY-MM-DD format."""
+    from datetime import datetime as _dt
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y", "%m/%d/%Y", "%d-%m-%Y"):
+        try:
+            return _dt.strptime(s.strip(), fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
 
 
 def _discover_calendars_via_gateway(cfg):
@@ -667,7 +735,6 @@ def get_settings():
         "currency": stored.get("currency", "USD"),
         "exchange_rate": stored.get("exchange_rate", 1.0),
         "rate_updated": stored.get("rate_updated", ""),
-        "default_model": stored.get("default_model", "openclaw:main"),
         "onboarding_complete": stored.get("onboarding_complete", False),
         "bot_name": bot_name,
         "has_custom_icon": (DATA_DIR / "brand-icon.png").exists(),
@@ -706,9 +773,6 @@ def save_settings():
 
     if "rate_updated" in body:
         stored["rate_updated"] = body["rate_updated"]
-
-    if "default_model" in body:
-        stored["default_model"] = str(body["default_model"]).strip()
 
     if "custom_models" in body:
         raw = body["custom_models"]

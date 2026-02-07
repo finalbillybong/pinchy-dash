@@ -108,6 +108,7 @@ def get_calendar_events():
 def _calendar_via_gateway(days=7):
     """Ask the OpenClaw agent to list calendar events via chat completions."""
     if http_requests is None:
+        print("  [calendar-gw] requests library not available")
         return []
 
     cfg = _load_config()
@@ -115,6 +116,7 @@ def _calendar_via_gateway(days=7):
     gateway_token = os.environ.get("OPENCLAW_GATEWAY_TOKEN", "") or cfg.get("gateway_token", "")
 
     if not gateway_url or not gateway_token:
+        print("  [calendar-gw] no gateway_url or gateway_token configured")
         return []
 
     try:
@@ -123,17 +125,17 @@ def _calendar_via_gateway(days=7):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {gateway_token}",
         }
-        model = cfg.get("default_model") or "openclaw:main"
 
         prompt = (
-            f"Run `khal list today {days}d --format '{{start-date}} {{start-time}} {{end-time}} {{title}}'` "
-            "and return ONLY the raw output, nothing else. No explanation."
+            f"Run this exact command and return ONLY its raw output with no explanation, "
+            f"no markdown formatting, no code fences:\n"
+            f"khal list today {days}d --format '{{start-date}} {{start-time}} {{end-time}} {{title}}'"
         )
 
         resp = http_requests.post(
             url,
             json={
-                "model": model,
+                "model": "openclaw:main",
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 2000,
             },
@@ -142,48 +144,99 @@ def _calendar_via_gateway(days=7):
         )
 
         if resp.status_code != 200:
+            print(f"  [calendar-gw] Gateway returned HTTP {resp.status_code}")
             return []
 
         data = resp.json()
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
         if not content:
+            print("  [calendar-gw] Gateway returned empty content")
             return []
 
-        # Parse the khal output lines
-        events = []
-        for line in content.strip().split("\n"):
-            line = line.strip()
-            if not line or line.startswith("```") or line.startswith("#"):
-                continue
-            # Expected: YYYY-MM-DD HH:MM HH:MM Title  OR  YYYY-MM-DD Title (all day)
-            m = re.match(r"(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+(\d{2}:\d{2})\s+(.+)", line)
-            if m:
-                events.append({
-                    "date": m.group(1),
-                    "time": m.group(2),
-                    "end": m.group(3),
-                    "title": m.group(4).strip(),
-                    "location": "",
-                    "calendar": "khal",
-                    "all_day": False,
-                })
-            else:
-                m2 = re.match(r"(\d{4}-\d{2}-\d{2})\s+(.+)", line)
-                if m2:
-                    events.append({
-                        "date": m2.group(1),
-                        "time": "All day",
-                        "end": "",
-                        "title": m2.group(2).strip(),
-                        "location": "",
-                        "calendar": "khal",
-                        "all_day": True,
-                    })
+        print(f"  [calendar-gw] Raw response ({len(content)} chars): {content[:200]}")
 
+        # Parse the khal output lines
+        events = _parse_khal_output(content)
+        print(f"  [calendar-gw] Parsed {len(events)} events")
         return events[:50]
     except Exception as e:
-        print(f"  [warn] Gateway calendar fallback failed: {e}")
+        print(f"  [calendar-gw] Error: {e}")
         return []
+
+
+def _parse_khal_output(content):
+    """Parse khal list output into event dicts. Handles multiple date formats."""
+    events = []
+    current_date = None
+
+    for line in content.strip().split("\n"):
+        line = line.strip()
+        if not line or line.startswith("```") or line.startswith("#"):
+            continue
+
+        # khal sometimes outputs date headers like "Today, 2026-02-07" or "Saturday, 08.02.2026"
+        date_header = re.match(r'^(?:Today|Tomorrow|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+(.+)', line, re.IGNORECASE)
+        if date_header:
+            date_str = date_header.group(1).strip()
+            parsed = _try_parse_date(date_str)
+            if parsed:
+                current_date = parsed
+            continue
+
+        # Standard format: YYYY-MM-DD HH:MM HH:MM Title
+        m = re.match(r"(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+(\d{2}:\d{2})\s+(.+)", line)
+        if m:
+            events.append({
+                "date": m.group(1), "time": m.group(2), "end": m.group(3),
+                "title": m.group(4).strip(), "location": "", "calendar": "khal", "all_day": False,
+            })
+            continue
+
+        # Format: YYYY-MM-DD HH:MM Title (no end time)
+        m2 = re.match(r"(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+(.+)", line)
+        if m2:
+            events.append({
+                "date": m2.group(1), "time": m2.group(2), "end": "",
+                "title": m2.group(3).strip(), "location": "", "calendar": "khal", "all_day": False,
+            })
+            continue
+
+        # Format: YYYY-MM-DD Title (all day)
+        m3 = re.match(r"(\d{4}-\d{2}-\d{2})\s+(.+)", line)
+        if m3:
+            events.append({
+                "date": m3.group(1), "time": "All day", "end": "",
+                "title": m3.group(2).strip(), "location": "", "calendar": "khal", "all_day": True,
+            })
+            continue
+
+        # Time-only line under a date header: "HH:MM-HH:MM Title" or "HH:MM HH:MM Title"
+        if current_date:
+            m4 = re.match(r"(\d{2}:\d{2})[-\s]+(\d{2}:\d{2})\s+(.+)", line)
+            if m4:
+                events.append({
+                    "date": current_date, "time": m4.group(1), "end": m4.group(2),
+                    "title": m4.group(3).strip(), "location": "", "calendar": "khal", "all_day": False,
+                })
+                continue
+            # All day event under date header
+            if not re.match(r'\d', line):
+                events.append({
+                    "date": current_date, "time": "All day", "end": "",
+                    "title": line, "location": "", "calendar": "khal", "all_day": True,
+                })
+
+    return events
+
+
+def _try_parse_date(s):
+    """Try to parse a date string into YYYY-MM-DD format."""
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y", "%m/%d/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(s.strip(), fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +309,7 @@ def _check_gateway_health():
     Used in standalone container mode where pgrep can't see the OpenClaw process.
     """
     if http_requests is None:
+        print("  [gateway-health] requests library not available")
         return False
 
     cfg = _load_config()
@@ -263,23 +317,47 @@ def _check_gateway_health():
     gateway_token = os.environ.get("OPENCLAW_GATEWAY_TOKEN", "") or cfg.get("gateway_token", "")
 
     if not gateway_url:
+        print("  [gateway-health] no gateway_url configured")
         return False
 
-    try:
-        # Try a lightweight request — /v1/models or just the root
-        headers = {}
-        if gateway_token:
-            headers["Authorization"] = f"Bearer {gateway_token}"
+    headers = {"Content-Type": "application/json"}
+    if gateway_token:
+        headers["Authorization"] = f"Bearer {gateway_token}"
 
+    # Method A: lightweight chat completions ping (most reliable — we know chat works)
+    try:
+        resp = http_requests.post(
+            f"{gateway_url.rstrip('/')}/v1/chat/completions",
+            json={
+                "model": "openclaw:main",
+                "messages": [{"role": "user", "content": "ping"}],
+                "max_tokens": 1,
+            },
+            headers=headers,
+            timeout=8,
+        )
+        if resp.status_code < 500:
+            print(f"  [gateway-health] chat endpoint responded {resp.status_code} — alive")
+            return True
+        print(f"  [gateway-health] chat endpoint returned {resp.status_code}")
+    except Exception as e:
+        print(f"  [gateway-health] chat endpoint error: {e}")
+
+    # Method B: fallback to simple GET on root or /v1/models
+    try:
         resp = http_requests.get(
             f"{gateway_url.rstrip('/')}/v1/models",
             headers=headers,
             timeout=5,
         )
-        # Any response (even 404/405) means the Gateway is alive
-        return resp.status_code < 500
-    except Exception:
-        return False
+        if resp.status_code < 500:
+            print(f"  [gateway-health] /v1/models responded {resp.status_code} — alive")
+            return True
+        print(f"  [gateway-health] /v1/models returned {resp.status_code}")
+    except Exception as e:
+        print(f"  [gateway-health] /v1/models error: {e}")
+
+    return False
 
 
 def get_agent_status():

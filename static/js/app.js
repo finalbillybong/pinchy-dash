@@ -15,9 +15,6 @@ const App = {
     symbol: '$',
     rate: 1.0,       // Exchange rate from USD
   },
-  models: {          // Model setting
-    default: 'openclaw:main',
-  },
   branding: {        // Custom branding
     name: 'Pinchy',
     hasIcon: false,
@@ -198,8 +195,6 @@ async function loadDashboardData() {
     App.currency.code = code;
     App.currency.symbol = CURRENCY_SYMBOLS[code] || code + ' ';
     App.currency.rate = settings.exchange_rate || 1.0;
-    App.models.default = settings.default_model || 'openclaw:main';
-
     // Branding
     App.branding.name = settings.bot_name || 'Pinchy';
     App.branding.hasIcon = !!settings.has_custom_icon;
@@ -400,8 +395,6 @@ function setupMobileNav() {
 const _onboarding = {
   step: 1,
   connected: false,
-  models: [],
-  defaultModel: 'openclaw:main',
   calendarEvents: [],
   calendarOk: false,
 };
@@ -453,9 +446,8 @@ function _renderOnboardingStep() {
   });
 
   if (step === 1) _renderStep1(body, titleEl, subtitleEl);
-  else if (step === 2) _renderStep2(body, titleEl, subtitleEl);
-  else if (step === 3) _renderStep3(body, titleEl, subtitleEl);
-  else if (step === 4) _renderStep4(body, titleEl, subtitleEl);
+  else if (step === 2) _renderStep3(body, titleEl, subtitleEl);
+  else if (step === 3) _renderStep4(body, titleEl, subtitleEl);
 }
 
 // --- Step 1: Gateway Connection ---
@@ -520,7 +512,7 @@ function _renderStep1(body, titleEl, subtitleEl) {
     } else {
       const err = (testResp && testResp.error) || 'Could not connect.';
       _obMsg('Settings saved. ' + err, 'error');
-      // Allow continuing anyway
+      // Allow continuing anyway — skip to calendar step
       skipBtn.textContent = 'Continue anyway';
       skipBtn.onclick = () => { _onboarding.step = 2; _renderOnboardingStep(); };
     }
@@ -534,48 +526,7 @@ function _renderStep1(body, titleEl, subtitleEl) {
   });
 }
 
-// --- Step 2: Agent Model ---
-function _renderStep2(body, titleEl, subtitleEl) {
-  titleEl.textContent = 'Agent Model';
-  subtitleEl.textContent = 'Set the model ID sent with chat requests.';
-
-  body.innerHTML = `
-    <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:16px;">
-      OpenClaw routes requests to whichever provider is configured in its own config. 
-      This field is sent as the <code style="background:var(--bg-card);padding:1px 4px;border-radius:3px;">model</code> parameter — 
-      it's for reference and logging only.
-    </p>
-    <div class="form-group">
-      <label class="form-label">Model ID</label>
-      <input class="form-input" id="obModelId" type="text" value="openclaw:main" placeholder="openclaw:main" autocomplete="off"
-             style="font-family:'Consolas','Monaco','Courier New',monospace;font-size:0.88rem;" />
-      <p style="font-size:0.72rem;color:var(--text-muted);margin-top:4px;">
-        e.g. <code style="background:var(--bg-card);padding:1px 4px;border-radius:3px;">openclaw:main</code>,
-        <code style="background:var(--bg-card);padding:1px 4px;border-radius:3px;">anthropic/claude-opus-4-6</code>
-      </p>
-    </div>
-    <div id="obMsg" style="display:none;margin-bottom:16px;margin-top:12px;"></div>
-    <div style="display:flex;gap:10px;margin-top:16px;">
-      <button class="btn btn-ghost" id="obBackBtn">Back</button>
-      <button class="btn btn-primary" id="obNextBtn" style="flex:1;">Continue</button>
-      <button class="btn btn-ghost" id="obSkipBtn">Skip</button>
-    </div>
-  `;
-
-  document.getElementById('obBackBtn').addEventListener('click', () => { _onboarding.step = 1; _renderOnboardingStep(); });
-  document.getElementById('obSkipBtn').addEventListener('click', () => { _onboarding.step = 3; _renderOnboardingStep(); });
-
-  const nextBtn = document.getElementById('obNextBtn');
-  nextBtn.addEventListener('click', async () => {
-    const modelId = (document.getElementById('obModelId').value || '').trim() || 'openclaw:main';
-    _onboarding.defaultModel = modelId;
-    await apiPost('/api/settings', { default_model: modelId });
-    _onboarding.step = 3;
-    _renderOnboardingStep();
-  });
-}
-
-// --- Step 3: Calendar Discovery ---
+// --- Step 2 (Calendar Discovery, was Step 3) ---
 function _renderStep3(body, titleEl, subtitleEl) {
   titleEl.textContent = 'Calendar Setup';
   subtitleEl.textContent = 'Discover calendars from your OpenClaw mount.';
@@ -598,8 +549,8 @@ function _renderStep3(body, titleEl, subtitleEl) {
     </div>
   `;
 
-  document.getElementById('obBackBtn').addEventListener('click', () => { _onboarding.step = 2; _renderOnboardingStep(); });
-  document.getElementById('obSkipBtn').addEventListener('click', () => { _onboarding.step = 4; _renderOnboardingStep(); });
+  document.getElementById('obBackBtn').addEventListener('click', () => { _onboarding.step = 1; _renderOnboardingStep(); });
+  document.getElementById('obSkipBtn').addEventListener('click', () => { _onboarding.step = 3; _renderOnboardingStep(); });
 
   const nextBtn = document.getElementById('obNextBtn');
   nextBtn.addEventListener('click', async () => {
@@ -609,7 +560,7 @@ function _renderStep3(body, titleEl, subtitleEl) {
     await apiPost('/api/settings', { enabled_calendars: enabled });
     _onboarding.calendarOk = enabled.length > 0;
     _onboarding.calendarEvents = enabled;
-    _onboarding.step = 4;
+    _onboarding.step = 3;
     _renderOnboardingStep();
   });
 
@@ -670,10 +621,6 @@ function _renderStep4(body, titleEl, subtitleEl) {
       <div class="onboarding-summary-row">
         <span class="label">Gateway</span>
         <span class="value ${_onboarding.connected ? 'ok' : 'warn'}">${_onboarding.connected ? 'Connected' : 'Not tested'}</span>
-      </div>
-      <div class="onboarding-summary-row">
-        <span class="label">Default Model</span>
-        <span class="value">${_onboarding.defaultModel}</span>
       </div>
       <div class="onboarding-summary-row">
         <span class="label">Calendar</span>

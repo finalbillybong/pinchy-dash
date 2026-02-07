@@ -10,9 +10,6 @@ registerView('settings', async function renderSettings() {
   const srcUrl = (settings && settings.source_url) || 'config';
   const srcToken = (settings && settings.source_token) || 'config';
 
-  // Model setting — simple agent ID
-  const defaultModel = (settings && settings.default_model) || 'openclaw:main';
-
   // Currency settings
   const currentCurrency = (settings && settings.currency) || 'USD';
   const currentRate = (settings && settings.exchange_rate) || 1.0;
@@ -156,37 +153,6 @@ registerView('settings', async function renderSettings() {
         </div>
 
         <div id="calendarMessage" style="margin-top: 16px; display: none;"></div>
-      </div>
-
-      <!-- Agent Model -->
-      <div class="card fade-in" style="margin-bottom: 24px;">
-        <div class="card-header">
-          <span class="card-title">Agent Model</span>
-          <span class="tag tag-primary" style="font-family: var(--font-mono, monospace); font-size: 0.7rem;">${escapeAttr(defaultModel)}</span>
-        </div>
-        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5;">
-          The model ID sent to the Gateway with chat requests. OpenClaw routes your messages to whichever provider
-          is configured in its own config — this field is for reference and logging only.
-        </p>
-
-        <div class="form-group">
-          <label class="form-label">Model ID</label>
-          <input class="form-input" id="settingsDefaultModel" type="text"
-                 value="${escapeAttr(defaultModel)}"
-                 placeholder="openclaw:main" autocomplete="off"
-                 style="font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 0.88rem;" />
-          <p style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px;">
-            e.g. <code style="background:var(--bg-deep);padding:1px 4px;border-radius:4px;">openclaw:main</code>,
-            <code style="background:var(--bg-deep);padding:1px 4px;border-radius:4px;">anthropic/claude-opus-4-6</code>,
-            <code style="background:var(--bg-deep);padding:1px 4px;border-radius:4px;">openrouter/auto</code>
-          </p>
-        </div>
-
-        <div style="display: flex; gap: 10px; margin-top: 20px;">
-          <button class="btn btn-primary" onclick="saveDefaultModel()">Save Model</button>
-        </div>
-
-        <div id="modelMessage" style="margin-top: 16px; display: none;"></div>
       </div>
 
       <!-- Gateway Settings -->
@@ -471,49 +437,6 @@ async function saveCurrency() {
 }
 
 // ---------------------------------------------------------------------------
-// Model settings
-// ---------------------------------------------------------------------------
-
-function showModelMessage(text, type) {
-  const el = document.getElementById('modelMessage');
-  if (!el) return;
-  const colors = {
-    success: { bg: 'var(--success-dim)', border: 'rgba(29,209,161,0.25)', color: 'var(--success)' },
-    error:   { bg: 'var(--accent-dim)',  border: 'rgba(255,107,107,0.25)', color: 'var(--accent)' },
-    info:    { bg: 'var(--primary-dim)', border: 'rgba(72,219,251,0.25)',  color: 'var(--primary)' },
-  };
-  const c = colors[type] || colors.info;
-  el.style.display = 'block';
-  el.style.padding = '12px 16px';
-  el.style.borderRadius = '8px';
-  el.style.fontSize = '0.85rem';
-  el.style.background = c.bg;
-  el.style.border = `1px solid ${c.border}`;
-  el.style.color = c.color;
-  el.textContent = text;
-}
-
-async function saveDefaultModel() {
-  const input = document.getElementById('settingsDefaultModel');
-  const modelId = (input?.value || '').trim();
-  if (!modelId) {
-    showModelMessage('Model ID cannot be empty.', 'error');
-    return;
-  }
-
-  const resp = await apiPost('/api/settings', { default_model: modelId });
-  if (resp && resp.saved) {
-    App.models.default = modelId;
-    showModelMessage(`Model set to ${modelId}`, 'success');
-    // Update the badge in-place
-    const modelBadge = document.querySelector('.card-header .tag[style*="font-family"]');
-    if (modelBadge) modelBadge.textContent = modelId;
-  } else {
-    showModelMessage((resp && resp.error) || 'Failed to save model.', 'error');
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Calendar sync
 // ---------------------------------------------------------------------------
 
@@ -609,7 +532,14 @@ async function saveCalendarSettings() {
 
   const resp = await apiPost('/api/settings', body);
   if (resp && resp.saved) {
-    showCalendarMessage(`Saved! ${enabled.length} calendar(s) enabled. Events will update on next collector run.`, 'success');
+    showCalendarMessage(`Saved! ${enabled.length} calendar(s) enabled. Refreshing events...`, 'success');
+    // Trigger an immediate collector run so events appear right away
+    try { await apiPost('/api/collect', {}); } catch { /* non-critical */ }
+    // Wait a moment for the collector to finish, then refresh data
+    setTimeout(async () => {
+      try { await loadDashboardData(); } catch { /* silent */ }
+      showCalendarMessage(`Saved! ${enabled.length} calendar(s) enabled. Events updated.`, 'success');
+    }, 5000);
   } else {
     showCalendarMessage((resp && resp.error) || 'Failed to save calendar settings.', 'error');
   }
