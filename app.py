@@ -628,54 +628,62 @@ def _strip_code_fences(text):
 
 
 def _parse_khal_output(content):
-    """Parse khal list output into event dicts. Handles multiple date formats."""
+    """Parse khal list output into event dicts. Handles multiple date formats
+    including DD/MM/YYYY, YYYY-MM-DD, DD.MM.YYYY etc."""
     import re
     # Strip markdown code fences that the agent might wrap around output
     content = _strip_code_fences(content)
     events = []
     current_date = None
 
+    # Generic date pattern: matches YYYY-MM-DD, DD/MM/YYYY, DD.MM.YYYY, DD-MM-YYYY
+    DATE_RE = r'(\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4})'
+
     for line in content.strip().split("\n"):
         line = line.strip()
         if not line or line.startswith("#"):
             continue
 
-        # khal sometimes outputs date headers like "Today, 2026-02-07" or "Saturday, 08.02.2026"
+        # Date headers: "Today, 07/02/2026" or "Saturday, 08.02.2026"
         date_header = re.match(r'^(?:Today|Tomorrow|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+(.+)', line, re.IGNORECASE)
         if date_header:
-            date_str = date_header.group(1).strip()
-            # Try to parse the date from the header
-            parsed = _try_parse_date(date_str)
+            parsed = _try_parse_date(date_header.group(1).strip())
             if parsed:
                 current_date = parsed
             continue
 
-        # Standard format: YYYY-MM-DD HH:MM HH:MM Title
-        m = re.match(r"(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+(\d{2}:\d{2})\s+(.+)", line)
+        # Format: DATE HH:MM HH:MM Title (with start and end time)
+        m = re.match(DATE_RE + r'\s+(\d{2}:\d{2})\s+(\d{2}:\d{2})\s+(.+)', line)
         if m:
-            events.append({
-                "date": m.group(1), "time": m.group(2), "end": m.group(3),
-                "title": m.group(4).strip(), "location": "", "calendar": "khal", "all_day": False,
-            })
-            continue
+            parsed = _try_parse_date(m.group(1))
+            if parsed:
+                events.append({
+                    "date": parsed, "time": m.group(2), "end": m.group(3),
+                    "title": m.group(4).strip(), "location": "", "calendar": "khal", "all_day": False,
+                })
+                continue
 
-        # Format: YYYY-MM-DD HH:MM Title (no end time)
-        m2 = re.match(r"(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+(.+)", line)
+        # Format: DATE HH:MM Title (no end time)
+        m2 = re.match(DATE_RE + r'\s+(\d{2}:\d{2})\s+(.+)', line)
         if m2:
-            events.append({
-                "date": m2.group(1), "time": m2.group(2), "end": "",
-                "title": m2.group(3).strip(), "location": "", "calendar": "khal", "all_day": False,
-            })
-            continue
+            parsed = _try_parse_date(m2.group(1))
+            if parsed:
+                events.append({
+                    "date": parsed, "time": m2.group(2), "end": "",
+                    "title": m2.group(3).strip(), "location": "", "calendar": "khal", "all_day": False,
+                })
+                continue
 
-        # Format: YYYY-MM-DD Title (all day)
-        m3 = re.match(r"(\d{4}-\d{2}-\d{2})\s+(.+)", line)
+        # Format: DATE Title (all day)
+        m3 = re.match(DATE_RE + r'\s+(.+)', line)
         if m3:
-            events.append({
-                "date": m3.group(1), "time": "All day", "end": "",
-                "title": m3.group(2).strip(), "location": "", "calendar": "khal", "all_day": True,
-            })
-            continue
+            parsed = _try_parse_date(m3.group(1))
+            if parsed:
+                events.append({
+                    "date": parsed, "time": "All day", "end": "",
+                    "title": m3.group(2).strip(), "location": "", "calendar": "khal", "all_day": True,
+                })
+                continue
 
         # Time-only line under a date header: "HH:MM-HH:MM Title" or "HH:MM HH:MM Title"
         if current_date:
