@@ -9,7 +9,7 @@
   <Support/>
   <Overview>Pinchy Dashboard — A modern monitoring dashboard for your OpenClaw AI agent. Tracks tokens, costs, sessions, goals, calendar, chat, and agent health.</Overview>
   <Category>Tools: AI:</Category>
-  <WebUI>http://[IP]:[PORT:39876]</WebUI>
+  <WebUI>http://[IP]:[PORT:39877]</WebUI>
   <Icon>https://raw.githubusercontent.com/finalbillybong/pinchy-dash/main/static/pinchy-icon.png</Icon>
   <ExtraParams>--restart unless-stopped</ExtraParams>
   <DateInstalled></DateInstalled>
@@ -26,7 +26,7 @@
     Display="always"
     Required="true"
     Mask="false"
-  >39876</Config>
+  >39877</Config>
 
   <!-- Persistent data -->
   <Config
