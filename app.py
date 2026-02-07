@@ -1056,10 +1056,14 @@ _WORKSPACE_PATH = os.environ.get("OPENCLAW_WORKSPACE_PATH", "/root/.openclaw/wor
 @app.route("/api/workspace/identity")
 def get_identity():
     """Return parsed IDENTITY.md."""
-    result = workspace_reader.read_identity(_WORKSPACE_PATH)
-    if result is None:
-        return jsonify({"found": False})
-    return jsonify({**result, "found": True})
+    try:
+        result = workspace_reader.read_identity(_WORKSPACE_PATH)
+        if result is None:
+            return jsonify({"found": False})
+        return jsonify({**result, "found": True})
+    except Exception as e:
+        print(f"  [error] /api/workspace/identity: {e}")
+        return jsonify({"found": False, "error": str(e)}), 500
 
 
 @app.route("/api/workspace/identity", methods=["POST"])
@@ -1095,13 +1099,18 @@ def get_soul():
 @app.route("/api/workspace/soul", methods=["POST"])
 @require_api_key
 def save_soul():
-    """Write soul.md back to the workspace."""
+    """Write SOUL.md back to the workspace."""
     body = request.get_json(silent=True) or {}
     content = body.get("content", "")
     if not content:
         return jsonify({"error": "Content is required"}), 400
     try:
-        workspace_reader.write_workspace_file("soul.md", content, _WORKSPACE_PATH)
+        # Use existing filename (SOUL.md or soul.md), default to SOUL.md
+        ws = Path(_WORKSPACE_PATH)
+        filename = "SOUL.md"
+        if (ws / "soul.md").exists() and not (ws / "SOUL.md").exists():
+            filename = "soul.md"
+        workspace_reader.write_workspace_file(filename, content, _WORKSPACE_PATH)
         return jsonify({"saved": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

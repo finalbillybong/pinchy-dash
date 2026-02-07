@@ -328,42 +328,25 @@ def _check_gateway_health():
         print("  [gateway-health] no gateway_url configured")
         return False
 
-    headers = {"Content-Type": "application/json"}
+    headers = {}
     if gateway_token:
         headers["Authorization"] = f"Bearer {gateway_token}"
 
-    # Method A: lightweight chat completions ping (most reliable — we know chat works)
-    try:
-        resp = http_requests.post(
-            f"{gateway_url.rstrip('/')}/v1/chat/completions",
-            json={
-                "model": "openclaw:main",
-                "messages": [{"role": "user", "content": "ping"}],
-                "max_tokens": 1,
-            },
-            headers=headers,
-            timeout=8,
-        )
-        if resp.status_code < 500:
-            print(f"  [gateway-health] chat endpoint responded {resp.status_code} — alive")
-            return True
-        print(f"  [gateway-health] chat endpoint returned {resp.status_code}")
-    except Exception as e:
-        print(f"  [gateway-health] chat endpoint error: {e}")
-
-    # Method B: fallback to simple GET on root or /v1/models
-    try:
-        resp = http_requests.get(
-            f"{gateway_url.rstrip('/')}/v1/models",
-            headers=headers,
-            timeout=5,
-        )
-        if resp.status_code < 500:
-            print(f"  [gateway-health] /v1/models responded {resp.status_code} — alive")
-            return True
-        print(f"  [gateway-health] /v1/models returned {resp.status_code}")
-    except Exception as e:
-        print(f"  [gateway-health] /v1/models error: {e}")
+    # Method A: simple GET — any HTTP response means Gateway is alive
+    for path in ("/v1/models", "/v1/chat/completions", "/"):
+        try:
+            resp = http_requests.get(
+                f"{gateway_url.rstrip('/')}{path}",
+                headers=headers,
+                timeout=5,
+            )
+            # Any response (even 404/405) means the Gateway is running
+            if resp.status_code < 500:
+                print(f"  [gateway-health] {path} responded {resp.status_code} — alive")
+                return True
+            print(f"  [gateway-health] {path} returned {resp.status_code}")
+        except Exception as e:
+            print(f"  [gateway-health] {path} error: {e}")
 
     return False
 

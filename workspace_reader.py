@@ -65,12 +65,16 @@ def read_identity(base_path=None):
 
 def read_soul(base_path=None):
     """
-    Read soul.md and return its raw content.
+    Read SOUL.md (or soul.md) and return its raw content.
     Returns: { "raw": "full markdown content" } or None.
     """
     ws = Path(base_path or DEFAULT_WORKSPACE)
-    soul_file = ws / "soul.md"
-    if not soul_file.exists():
+    # Try both cases
+    for name in ("SOUL.md", "soul.md"):
+        soul_file = ws / name
+        if soul_file.exists():
+            break
+    else:
         return None
 
     try:
@@ -87,7 +91,7 @@ def write_workspace_file(filename, content, base_path=None):
     Only allows writing to known filenames (IDENTITY.md, soul.md) for safety.
     Returns True on success, raises ValueError/IOError on failure.
     """
-    ALLOWED_FILES = {"IDENTITY.md", "soul.md"}
+    ALLOWED_FILES = {"IDENTITY.md", "soul.md", "SOUL.md"}
     if filename not in ALLOWED_FILES:
         raise ValueError(f"Writing to {filename} is not allowed")
 
