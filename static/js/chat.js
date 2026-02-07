@@ -115,14 +115,14 @@ registerView('chat', async function renderChat() {
       input.focus();
     }
 
-    // Scroll to bottom if we have history — use multiple attempts for mobile
-    if (messages && _chatHistory.length > 0) {
-      messages.scrollTop = messages.scrollHeight;
-      // Secondary delayed scroll for mobile where layout may not be complete yet
-      requestAnimationFrame(() => {
-        messages.scrollTop = messages.scrollHeight;
-        setTimeout(() => { messages.scrollTop = messages.scrollHeight; }, 200);
-      });
+    // Scroll to bottom — multiple attempts to handle mobile layout settling
+    if (messages) {
+      const scrollBottom = () => { messages.scrollTop = messages.scrollHeight; };
+      scrollBottom();
+      requestAnimationFrame(scrollBottom);
+      setTimeout(scrollBottom, 100);
+      setTimeout(scrollBottom, 300);
+      setTimeout(scrollBottom, 600);
     }
 
     // Clear conversation button
