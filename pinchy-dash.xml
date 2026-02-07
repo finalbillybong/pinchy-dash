@@ -41,13 +41,13 @@
     Mask="false"
   >/mnt/user/appdata/pinchy-dash/data</Config>
 
-  <!-- OpenClaw data (read-only) -->
+  <!-- OpenClaw data (read-write for editing IDENTITY.md and soul.md) -->
   <Config
     Name="OpenClaw Data Path"
     Target="/root/.openclaw"
     Default="/mnt/user/appdata/openclaw/config/"
-    Mode="ro"
-    Description="Path to your OpenClaw data directory on the host. Mounted read-only so the collector can read session files and logs."
+    Mode="rw"
+    Description="Path to your OpenClaw data directory on the host. Mounted read-write so you can edit agent files (IDENTITY.md, soul.md) from the dashboard."
     Type="Path"
     Display="always"
     Required="false"

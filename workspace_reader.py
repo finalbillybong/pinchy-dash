@@ -63,6 +63,44 @@ def read_identity(base_path=None):
     }
 
 
+def read_soul(base_path=None):
+    """
+    Read soul.md and return its raw content.
+    Returns: { "raw": "full markdown content" } or None.
+    """
+    ws = Path(base_path or DEFAULT_WORKSPACE)
+    soul_file = ws / "soul.md"
+    if not soul_file.exists():
+        return None
+
+    try:
+        raw = soul_file.read_text("utf-8")
+    except Exception:
+        return None
+
+    return {"raw": raw}
+
+
+def write_workspace_file(filename, content, base_path=None):
+    """
+    Write a markdown file to the workspace directory.
+    Only allows writing to known filenames (IDENTITY.md, soul.md) for safety.
+    Returns True on success, raises ValueError/IOError on failure.
+    """
+    ALLOWED_FILES = {"IDENTITY.md", "soul.md"}
+    if filename not in ALLOWED_FILES:
+        raise ValueError(f"Writing to {filename} is not allowed")
+
+    ws = Path(base_path or DEFAULT_WORKSPACE)
+    target = ws / filename
+    # Ensure we stay inside the workspace directory
+    if not str(target.resolve()).startswith(str(ws.resolve())):
+        raise ValueError("Path traversal attempt blocked")
+
+    target.write_text(content, encoding="utf-8")
+    return True
+
+
 def read_heartbeat(base_path=None, threshold_minutes=10):
     """
     Read HEARTBEAT.md and check if agent was recently active.

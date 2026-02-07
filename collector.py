@@ -164,14 +164,22 @@ def _calendar_via_gateway(days=7):
         return []
 
 
+def _strip_code_fences(text):
+    """Remove markdown code fences from text, keeping only the content inside."""
+    text = re.sub(r'```[\w]*\n?', '', text)
+    return text.strip()
+
+
 def _parse_khal_output(content):
     """Parse khal list output into event dicts. Handles multiple date formats."""
+    # Strip markdown code fences that the agent might wrap around output
+    content = _strip_code_fences(content)
     events = []
     current_date = None
 
     for line in content.strip().split("\n"):
         line = line.strip()
-        if not line or line.startswith("```") or line.startswith("#"):
+        if not line or line.startswith("#"):
             continue
 
         # khal sometimes outputs date headers like "Today, 2026-02-07" or "Saturday, 08.02.2026"

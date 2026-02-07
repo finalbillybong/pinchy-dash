@@ -493,17 +493,79 @@ def get_calendar_events():
     days = request.args.get("days", 7, type=int)
     days = min(days, 90)  # cap at 90 days
 
+    print(f"  [cal-events] configured_path={configured_path!r}, enabled={enabled!r}, days={days}")
+
     # 1. Try ICS files (configured path + fallback paths)
     resolved_path, _source = ics_reader.find_calendar_path(configured_path)
     if resolved_path:
+        print(f"  [cal-events] ICS path found: {resolved_path} ({_source})")
         cal_ids = enabled if enabled else None
         events = ics_reader.read_calendar_events(resolved_path, calendar_ids=cal_ids, days_ahead=days)
         if events:
             return jsonify({"events": events, "count": len(events), "source": "ics"})
+        print(f"  [cal-events] ICS path exists but returned 0 events, trying Gateway")
+    else:
+        print(f"  [cal-events] No ICS path found, trying Gateway")
 
     # 2. Fallback: ask the Gateway's agent to run khal list
     events = _calendar_via_gateway(cfg, days)
     return jsonify({"events": events, "count": len(events), "source": "gateway" if events else "none"})
+
+
+@app.route("/api/calendars/debug")
+def calendar_debug():
+    """Debug endpoint: returns raw Gateway response for calendar query."""
+    cfg = _get_config()
+    configured_path = cfg.get("calendar_path", "/calendars")
+    enabled = cfg.get("enabled_calendars", [])
+    resolved_path, _source = ics_reader.find_calendar_path(configured_path)
+
+    debug = {
+        "configured_path": configured_path,
+        "enabled_calendars": enabled,
+        "ics_resolved_path": resolved_path,
+        "ics_source": _source,
+        "gateway_url": cfg.get("gateway_url", ""),
+        "has_token": bool(cfg.get("gateway_token")),
+    }
+
+    # Try Gateway and capture raw response
+    if cfg.get("gateway_url") and cfg.get("gateway_token"):
+        try:
+            gateway_url = f"{cfg['gateway_url'].rstrip('/')}/v1/chat/completions"
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {cfg['gateway_token']}",
+            }
+            prompt = (
+                "Run this exact command and return ONLY its raw output with no explanation, "
+                "no markdown formatting, no code fences:\n"
+                "khal list today 7d --format '{start-date} {start-time} {end-time} {title}'"
+            )
+            resp = http_requests.post(
+                gateway_url,
+                json={
+                    "model": "openclaw:main",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 2000,
+                },
+                headers=headers,
+                timeout=30,
+            )
+            debug["gateway_status"] = resp.status_code
+            if resp.status_code == 200:
+                data = resp.json()
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                debug["gateway_raw_content"] = content
+                debug["gateway_parsed_events"] = _parse_khal_output(content)
+            else:
+                debug["gateway_error"] = resp.text[:500]
+        except Exception as e:
+            debug["gateway_error"] = str(e)
+    else:
+        debug["gateway_error"] = "No gateway_url or gateway_token configured"
+
+    return jsonify(debug)
 
 
 def _calendar_via_gateway(cfg, days=7):
@@ -557,15 +619,25 @@ def _calendar_via_gateway(cfg, days=7):
         return []
 
 
+def _strip_code_fences(text):
+    """Remove markdown code fences from text, keeping only the content inside."""
+    import re
+    # Remove ```...``` blocks, keeping the content between them
+    text = re.sub(r'```[\w]*\n?', '', text)
+    return text.strip()
+
+
 def _parse_khal_output(content):
     """Parse khal list output into event dicts. Handles multiple date formats."""
     import re
+    # Strip markdown code fences that the agent might wrap around output
+    content = _strip_code_fences(content)
     events = []
     current_date = None
 
     for line in content.strip().split("\n"):
         line = line.strip()
-        if not line or line.startswith("```") or line.startswith("#"):
+        if not line or line.startswith("#"):
             continue
 
         # khal sometimes outputs date headers like "Today, 2026-02-07" or "Saturday, 08.02.2026"
@@ -988,6 +1060,51 @@ def get_identity():
     if result is None:
         return jsonify({"found": False})
     return jsonify({**result, "found": True})
+
+
+@app.route("/api/workspace/identity", methods=["POST"])
+@require_api_key
+def save_identity():
+    """Write IDENTITY.md back to the workspace."""
+    body = request.get_json(silent=True) or {}
+    content = body.get("content", "")
+    if not content:
+        return jsonify({"error": "Content is required"}), 400
+    try:
+        workspace_reader.write_workspace_file("IDENTITY.md", content, _WORKSPACE_PATH)
+        # Re-read to update branding
+        identity = workspace_reader.read_identity(_WORKSPACE_PATH)
+        if identity and identity.get("name"):
+            stored = _read_json("config.json", {})
+            stored["bot_name"] = identity["name"]
+            _write_json("config.json", stored)
+        return jsonify({"saved": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/workspace/soul")
+def get_soul():
+    """Return soul.md content."""
+    result = workspace_reader.read_soul(_WORKSPACE_PATH)
+    if result is None:
+        return jsonify({"found": False, "raw": ""})
+    return jsonify({**result, "found": True})
+
+
+@app.route("/api/workspace/soul", methods=["POST"])
+@require_api_key
+def save_soul():
+    """Write soul.md back to the workspace."""
+    body = request.get_json(silent=True) or {}
+    content = body.get("content", "")
+    if not content:
+        return jsonify({"error": "Content is required"}), 400
+    try:
+        workspace_reader.write_workspace_file("soul.md", content, _WORKSPACE_PATH)
+        return jsonify({"saved": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/workspace/heartbeat")

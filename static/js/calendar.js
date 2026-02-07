@@ -61,7 +61,14 @@ registerView('calendar', async function renderCalendar() {
     <!-- Calendar list grouped by day -->
     <div class="card fade-in">
       <div id="calendarGroups">
-        ${calError ? `<div class="empty-state"><p>${calError}</p></div>` : ''}
+        ${calError ? `
+          <div class="empty-state" style="padding:24px;">
+            <p style="margin-bottom:12px;">${calError}</p>
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+              <button class="btn btn-primary" id="calRetryBtn" style="font-size:0.85rem;">Retry</button>
+              <a href="#settings" class="btn btn-ghost" style="font-size:0.85rem;text-decoration:none;">Calendar Settings</a>
+            </div>
+          </div>` : ''}
         ${groupKeys.length ? groupKeys.map(date => `
           <div class="day-group calendar-group" data-date="${date}">
             <div class="day-label">${date}</div>
@@ -81,7 +88,7 @@ registerView('calendar', async function renderCalendar() {
               `).join('')}
             </div>
           </div>
-        `).join('') : '<div class="empty-state"><p>No upcoming events in the next 7 days</p></div>'}
+        `).join('') : `${calError ? '' : '<div class="empty-state"><p>No upcoming events in the next 7 days</p></div>'}`}
       </div>
     </div>
   `;
@@ -90,6 +97,10 @@ registerView('calendar', async function renderCalendar() {
     const searchEl = document.getElementById('calendarSearch');
     if (searchEl) {
       searchEl.addEventListener('input', () => filterCalendar());
+    }
+    const retryBtn = document.getElementById('calRetryBtn');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', () => navigateTo('calendar'));
     }
   }, 50);
 

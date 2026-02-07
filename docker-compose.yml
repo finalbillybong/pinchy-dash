@@ -8,8 +8,8 @@ services:
     ports:
       - "39876:39876"
     volumes:
-      # Read-only access to OpenClaw session/log files for the collector
-      - ${OPENCLAW_DATA_DIR:-~/.openclaw}:/root/.openclaw:ro
+      # Access to OpenClaw data (rw needed to edit IDENTITY.md, soul.md)
+      - ${OPENCLAW_DATA_DIR:-~/.openclaw}:/root/.openclaw:rw
       # Optional: read-only access to vdirsyncer calendar data
       - ${CALENDAR_DATA_DIR:-/dev/null}:/calendars:ro
       # Persist dashboard state (config, chat history, goals, etc.)
