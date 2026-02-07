@@ -74,6 +74,7 @@ input, textarea, select { font-family: inherit; }
   left: 0;
   width: var(--sidebar-width);
   height: 100vh;
+  height: 100dvh; /* iOS Safari: respects dynamic viewport */
   background: var(--bg-surface);
   border-right: 1px solid var(--border-subtle);
   display: flex;
@@ -172,6 +173,7 @@ input, textarea, select { font-family: inherit; }
 
 .sidebar-footer {
   padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--border-subtle);
 }
 
