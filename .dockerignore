@@ -1,0 +1,11 @@
+data/
+.git/
+.gitignore
+*.md
+!SETUP.md
+__pycache__/
+*.pyc
+.env
+.cursor/
+node_modules/
+*.plan.md

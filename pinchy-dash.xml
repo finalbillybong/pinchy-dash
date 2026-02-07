@@ -1,0 +1,129 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>pinchy-dash</Name>
+  <Repository>finalbillybong/pinchy-dash:latest</Repository>
+  <Registry>https://hub.docker.com/r/finalbillybong/pinchy-dash</Registry>
+  <Network>bridge</Network>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Overview>Pinchy Dashboard — A modern monitoring dashboard for your OpenClaw AI agent. Tracks tokens, costs, sessions, goals, calendar, chat, and agent health.</Overview>
+  <Category>Tools: AI:</Category>
+  <WebUI>http://[IP]:[PORT:39876]</WebUI>
+  <Icon>https://raw.githubusercontent.com/finalbillybong/pinchy-dash/main/static/pinchy-icon.png</Icon>
+  <ExtraParams>--restart unless-stopped</ExtraParams>
+  <DateInstalled></DateInstalled>
+  <Description>Pinchy Dashboard — A modern monitoring dashboard for your OpenClaw AI agent. Features: token/cost tracking, session history, chat with your agent, goal management, content planning, learning log, calendar sync, and real-time agent health status. Connects to your OpenClaw Gateway for chat and calendar features.</Description>
+
+  <!-- Port mapping -->
+  <Config
+    Name="Web UI Port"
+    Target="39877"
+    Default="39877"
+    Mode="tcp"
+    Description="Port for the Pinchy Dashboard web interface."
+    Type="Port"
+    Display="always"
+    Required="true"
+    Mask="false"
+  >39876</Config>
+
+  <!-- Persistent data -->
+  <Config
+    Name="Dashboard Data"
+    Target="/app/data"
+    Default="/mnt/user/appdata/pinchy-dash/data"
+    Mode="rw"
+    Description="Stores dashboard config, chat history, goals, learning entries, and other persistent data."
+    Type="Path"
+    Display="always"
+    Required="true"
+    Mask="false"
+  >/mnt/user/appdata/pinchy-dash/data</Config>
+
+  <!-- OpenClaw data (read-only) -->
+  <Config
+    Name="OpenClaw Data Path"
+    Target="/root/.openclaw"
+    Default="/mnt/user/appdata/openclaw/config/"
+    Mode="ro"
+    Description="Path to your OpenClaw data directory on the host. Mounted read-only so the collector can read session files and logs."
+    Type="Path"
+    Display="always"
+    Required="false"
+    Mask="false"
+  >/mnt/user/appdata/openclaw/config/</Config>
+
+  <!-- Calendar data (read-only, optional) -->
+  <Config
+    Name="Calendar Data Path"
+    Target="/calendars"
+    Default=""
+    Mode="ro"
+    Description="Path to vdirsyncer calendar data on the host (e.g. /mnt/user/appdata/openclaw-calendars). Run: docker exec OpenClaw find /root/.local/share/vdirsyncer -type d -name calendars to find it. Leave empty if not using calendar."
+    Type="Path"
+    Display="always"
+    Required="false"
+    Mask="false"
+  ></Config>
+
+  <!-- Environment: Gateway URL -->
+  <Config
+    Name="OpenClaw Gateway URL"
+    Target="OPENCLAW_GATEWAY_URL"
+    Default=""
+    Description="URL of your OpenClaw Gateway (e.g. http://192.168.0.53:18789). Leave empty to configure via the web UI onboarding wizard instead."
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="false"
+  ></Config>
+
+  <!-- Environment: Gateway Token -->
+  <Config
+    Name="OpenClaw Gateway Token"
+    Target="OPENCLAW_GATEWAY_TOKEN"
+    Default=""
+    Description="Auth token for your OpenClaw Gateway. Found in your OpenClaw config under gateway.auth.token. Leave empty to configure via the web UI."
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="true"
+  ></Config>
+
+  <!-- Environment: API Key -->
+  <Config
+    Name="Dashboard API Key"
+    Target="DASHBOARD_API_KEY"
+    Default=""
+    Description="Optional. If set, write API endpoints (goals, content, learning, settings) require this key as a Bearer token. Leave empty for no protection (fine for local network use)."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"
+  ></Config>
+
+  <!-- Environment: Sessions path override -->
+  <Config
+    Name="OpenClaw Sessions Path"
+    Target="OPENCLAW_SESSIONS"
+    Default="/root/.openclaw/agents/main/sessions"
+    Description="Path to OpenClaw session files inside the container. Only change this if your OpenClaw uses a non-standard sessions directory."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"
+  >/root/.openclaw/agents/main/sessions</Config>
+
+  <!-- Environment: Flask debug -->
+  <Config
+    Name="Debug Mode"
+    Target="FLASK_DEBUG"
+    Default="0"
+    Description="Set to 1 to enable Flask debug mode with auto-reload. Leave at 0 for production."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"
+  >0</Config>
+</Container>

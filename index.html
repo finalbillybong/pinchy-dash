@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🦀 Pinchy Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #e4e4e4;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .header h1 {
+      font-size: 2.5rem;
+      background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 5px;
+    }
+    .header p { color: #888; font-size: 0.9rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 16px;
+      padding: 24px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    .card h2 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #888;
+      margin-bottom: 12px;
+    }
+    .stat {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .stat.cost { color: #48dbfb; }
+    .stat.tokens { color: #feca57; }
+    .stat.sessions { color: #ff6b6b; }
+    .stat.uptime { color: #1dd1a1; }
+    .trend {
+      font-size: 0.85rem;
+      color: #888;
+    }
+    .trend.up { color: #ff6b6b; }
+    .trend.down { color: #1dd1a1; }
+    .chart-container {
+      height: 200px;
+      margin-top: 20px;
+      position: relative;
+    }
+    .bar-chart {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      height: 150px;
+      padding: 0 10px;
+    }
+    .bar-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+    }
+    .bar {
+      width: 30px;
+      background: linear-gradient(180deg, #48dbfb, #0abde3);
+      border-radius: 4px 4px 0 0;
+      transition: height 0.5s ease;
+    }
+    .bar-label {
+      font-size: 0.7rem;
+      color: #666;
+      margin-top: 8px;
+    }
+    .wide { grid-column: span 2; }
+    @media (max-width: 768px) { .wide { grid-column: span 1; } }
+    .session-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .session-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .session-item:last-child { border-bottom: none; }
+    .session-name { color: #e4e4e4; }
+    .session-cost { color: #48dbfb; font-weight: 600; }
+    .session-tokens { color: #888; font-size: 0.85rem; }
+    .calendar-tag {
+      background: rgba(255,107,107,0.2);
+      color: #ff6b6b;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+    }
+    .learning-date {
+      color: #666;
+      font-size: 0.75rem;
+      white-space: nowrap;
+    }
+    .refresh-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: linear-gradient(135deg, #48dbfb, #0abde3);
+      color: #1a1a2e;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 30px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .refresh-btn:hover { transform: scale(1.05); }
+    .loading { opacity: 0.5; }
+    #lastUpdate { font-size: 0.75rem; color: #666; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🦀 Pinchy Dashboard</h1>
+    <p>Token & Cost Tracking</p>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>💰 Today's Cost</h2>
+      <div class="stat cost" id="todayCost">$0.00</div>
+      <div class="trend" id="costTrend">Loading...</div>
+    </div>
+
+    <div class="card">
+      <h2>🎯 Total Tokens</h2>
+      <div class="stat tokens" id="totalTokens">0</div>
+      <div class="trend" id="tokensTrend">Loading...</div>
+    </div>
+
+    <div class="card">
+      <h2>💬 Sessions</h2>
+      <div class="stat sessions" id="sessionCount">0</div>
+      <div class="trend">Active sessions</div>
+    </div>
+
+    <div class="card">
+      <h2>⏱️ Uptime</h2>
+      <div class="stat uptime" id="uptime">--</div>
+      <div class="trend" id="uptimeTrend">Since last restart</div>
+    </div>
+
+    <div class="card wide">
+      <h2>📊 7-Day Cost History</h2>
+      <div class="chart-container">
+        <div class="bar-chart" id="costChart"></div>
+      </div>
+    </div>
+
+    <div class="card wide">
+      <h2>📝 Recent Sessions</h2>
+      <div class="session-list" id="sessionList">
+        <div class="session-item">
+          <div>
+            <div class="session-name">Loading...</div>
+            <div class="session-tokens">--</div>
+          </div>
+          <div class="session-cost">--</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card wide">
+      <h2>📅 Upcoming Events</h2>
+      <div class="session-list" id="calendarList">
+        <div class="session-item">
+          <div class="session-name">Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card wide">
+      <h2>🧠 Learning Log</h2>
+      <div class="session-list" id="learningList">
+        <div class="session-item">
+          <div class="session-name">No entries yet</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="lastUpdate"></div>
+  <button class="refresh-btn" onclick="loadData()">🔄 Refresh</button>
+
+  <script>
+    async function loadData() {
+      document.body.classList.add('loading');
+      try {
+        const res = await fetch('data.json?' + Date.now());
+        const data = await res.json();
+        updateDashboard(data);
+      } catch (e) {
+        console.error('Failed to load data:', e);
+      }
+      document.body.classList.remove('loading');
+    }
+
+    function updateDashboard(data) {
+      // Today's cost
+      document.getElementById('todayCost').textContent = '$' + (data.todayCost || 0).toFixed(2);
+      const costChange = data.costChange || 0;
+      const costTrend = document.getElementById('costTrend');
+      costTrend.textContent = costChange >= 0 ? `↑ $${costChange.toFixed(2)} vs yesterday` : `↓ $${Math.abs(costChange).toFixed(2)} vs yesterday`;
+      costTrend.className = 'trend ' + (costChange >= 0 ? 'up' : 'down');
+
+      // Total tokens
+      document.getElementById('totalTokens').textContent = formatNumber(data.totalTokens || 0);
+      document.getElementById('tokensTrend').textContent = `${formatNumber(data.todayTokens || 0)} today`;
+
+      // Sessions
+      document.getElementById('sessionCount').textContent = data.sessionCount || 0;
+
+      // Uptime
+      if (data.uptimeMs) {
+        const hours = Math.floor(data.uptimeMs / 3600000);
+        const mins = Math.floor((data.uptimeMs % 3600000) / 60000);
+        document.getElementById('uptime').textContent = `${hours}h ${mins}m`;
+      }
+
+      // Chart
+      if (data.history && data.history.length > 0) {
+        const chart = document.getElementById('costChart');
+        const maxCost = Math.max(...data.history.map(h => h.cost), 0.01);
+        chart.innerHTML = data.history.map(h => `
+          <div class="bar-group">
+            <div class="bar" style="height: ${(h.cost / maxCost) * 140}px"></div>
+            <div class="bar-label">${h.day}</div>
+          </div>
+        `).join('');
+      }
+
+      // Sessions list
+      if (data.sessions && data.sessions.length > 0) {
+        const list = document.getElementById('sessionList');
+        list.innerHTML = data.sessions.map(s => `
+          <div class="session-item">
+            <div>
+              <div class="session-name">${s.name || s.key}</div>
+              <div class="session-tokens">${formatNumber(s.tokens)} tokens</div>
+            </div>
+            <div class="session-cost">$${(s.cost || 0).toFixed(3)}</div>
+          </div>
+        `).join('');
+      }
+
+      // Calendar events
+      if (data.calendar && data.calendar.length > 0) {
+        const cal = document.getElementById('calendarList');
+        cal.innerHTML = data.calendar.map(e => `
+          <div class="session-item">
+            <div>
+              <div class="session-name">${e.title || 'Untitled'}</div>
+              <div class="session-tokens">${e.date} ${e.time}${e.end ? ' - ' + e.end : ''}</div>
+            </div>
+            <div class="calendar-tag">${e.calendar || ''}</div>
+          </div>
+        `).join('');
+      } else {
+        document.getElementById('calendarList').innerHTML = '<div class="session-item"><div class="session-name" style="color:#888">No upcoming events</div></div>';
+      }
+
+      // Learning log
+      if (data.learning && data.learning.length > 0) {
+        const learn = document.getElementById('learningList');
+        learn.innerHTML = data.learning.slice().reverse().map(e => `
+          <div class="session-item">
+            <div>
+              <div class="session-name">${getTypeEmoji(e.type)} ${e.title}</div>
+              <div class="session-tokens">${e.detail || ''}</div>
+            </div>
+            <div class="learning-date">${e.date}</div>
+          </div>
+        `).join('');
+      } else {
+        document.getElementById('learningList').innerHTML = '<div class="session-item"><div class="session-name" style="color:#888">No learning entries yet</div></div>';
+      }
+
+      document.getElementById('lastUpdate').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+    }
+
+    function getTypeEmoji(type) {
+      const emojis = { decision: '🎯', lesson: '💡', observation: '👁️' };
+      return emojis[type] || '📝';
+    }
+
+    function formatNumber(n) {
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+      if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+      return n.toString();
+    }
+
+    loadData();
+    setInterval(loadData, 60000); // Refresh every minute
+  </script>
+</body>
+</html>

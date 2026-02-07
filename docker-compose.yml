@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  pinchy-dash:
+    image: finalbillybong/pinchy-dash:latest
+    build: .  # Used when running locally or with `docker compose build`
+    container_name: pinchy-dash
+    ports:
+      - "39876:39876"
+    volumes:
+      # Read-only access to OpenClaw session/log files for the collector
+      - ${OPENCLAW_DATA_DIR:-~/.openclaw}:/root/.openclaw:ro
+      # Optional: read-only access to vdirsyncer calendar data
+      - ${CALENDAR_DATA_DIR:-/dev/null}:/calendars:ro
+      # Persist dashboard state (config, chat history, goals, etc.)
+      - pinchy-data:/app/data
+    environment:
+      # Optional: set these if your Gateway uses env-based auth.
+      # If not set, configure via the onboarding wizard in the browser.
+      - OPENCLAW_GATEWAY_URL=${OPENCLAW_GATEWAY_URL:-}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
+      # Optional: protect write API endpoints with a key
+      - DASHBOARD_API_KEY=${DASHBOARD_API_KEY:-}
+    restart: unless-stopped
+
+volumes:
+  pinchy-data:
